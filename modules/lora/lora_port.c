@@ -134,12 +134,34 @@ int lora_uart3_send(const char *data, size_t len) {
   return 0;
 }
 
+int lora_uart3_comm_stop(void) {
+  // UART 인터럽트 비활성화
+  LL_USART_DisableIT_IDLE(LORA_PORT_UART);
+  LL_USART_DisableIT_PE(LORA_PORT_UART);
+  LL_USART_DisableIT_ERROR(LORA_PORT_UART);
+  LL_USART_DisableDMAReq_RX(LORA_PORT_UART);
+
+  // DMA 인터럽트 비활성화
+  LL_DMA_DisableIT_TE(LORA_PORT_UART_DMA, LORA_PORT_UART_DMA_STREAM);
+  LL_DMA_DisableIT_FE(LORA_PORT_UART_DMA, LORA_PORT_UART_DMA_STREAM);
+  LL_DMA_DisableIT_DME(LORA_PORT_UART_DMA, LORA_PORT_UART_DMA_STREAM);
+
+  // DMA 스트림 비활성화
+  LL_DMA_DisableStream(LORA_PORT_UART_DMA, LORA_PORT_UART_DMA_STREAM);
+
+  // USART 비활성화
+  LL_USART_Disable(LORA_PORT_UART);
+
+  LOG_INFO("LoRa UART3 통신 중지 완료");
+
+  return 0;
+}
 
 static const lora_hal_ops_t lora_uart3_ops = {
     .init = lora_uart3_hw_init,
     .reset = NULL,
     .start = lora_uart3_comm_start,
-    .stop = NULL,
+    .stop = lora_uart3_comm_stop,
     .send = lora_uart3_send,
     .recv = NULL,
 };
@@ -247,11 +269,12 @@ void lora_port_start(lora_t *lora_handle) {
 
 void lora_port_stop(lora_t *lora_handle) {
   if (!lora_handle || !lora_handle->ops || !lora_handle->ops->stop) {
-    LOG_ERR("LORA start failed: invalid handle or ops");
+    LOG_ERR("LORA stop failed: invalid handle or ops");
     return;
   }
 
   lora_handle->ops->stop();
+  LOG_INFO("LoRa 포트 중지 완료");
 }
 
 uint32_t lora_port_get_rx_pos() {

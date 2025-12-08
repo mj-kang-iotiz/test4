@@ -91,6 +91,14 @@ typedef enum {
 void lora_instance_init(void);
 
 /**
+ * @brief LoRa 인스턴스 중지 및 리소스 정리
+ *
+ * 태스크, 큐, 뮤텍스 삭제 및 UART 비활성화
+ * 재시작 시 lora_instance_init() 호출 필요
+ */
+void lora_instance_deinit(void);
+
+/**
  * @brief LoRa 명령어 전송 (동기)
  *
  * @param cmd AT 명령어 (예: "AT+SET_CONFIG=lora:work_mode:0\r\n")

@@ -258,13 +258,13 @@ void gsm_port_power_off(void) {
 
   vTaskDelay(pdMS_TO_TICKS(700)); // 700ms 유지 (최소 650ms)
 
- 
+
 
   // PWRKEY 핀 LOW: 정상 상태로 복귀
 
   HAL_GPIO_WritePin(GSM_PORT_GPIO_PORT, GSM_PORT_GPIO_PWR_PIN, GPIO_PIN_RESET);
 
- 
+
 
   // Power down 완료 대기 (1초)
 
@@ -272,4 +272,35 @@ void gsm_port_power_off(void) {
 
   vTaskDelay(pdMS_TO_TICKS(1000));
 
+}
+
+/**
+ * @brief EC25 모듈 전원 ON (HAL ops 콜백)
+ *
+ * PWRKEY 핀을 이용한 전원 ON 수행
+ * EC25 데이터시트에 따르면 PWRKEY 핀을 최소 500ms 이상 HIGH 유지 시 전원 ON
+ * 전원 ON 후 부팅 완료까지 약 13초 소요 (RDY URC는 자동 수신)
+ *
+ * @note GSM TX/RX 태스크와 UART는 계속 동작 중이므로,
+ *       전원 ON 후 RDY URC를 수신하면 자동으로 LTE 초기화가 진행됨
+ *
+ * @return int 0: 성공
+ */
+int gsm_port_power_on(void) {
+  // PWRKEY 핀 LOW: 초기 상태
+  HAL_GPIO_WritePin(GSM_PORT_GPIO_PORT, GSM_PORT_GPIO_PWR_PIN, GPIO_PIN_RESET);
+  vTaskDelay(pdMS_TO_TICKS(200)); // 200ms 대기 (안정화)
+
+  // PWRKEY 핀 HIGH: 전원 ON 시작
+  HAL_GPIO_WritePin(GSM_PORT_GPIO_PORT, GSM_PORT_GPIO_PWR_PIN, GPIO_PIN_SET);
+  vTaskDelay(pdMS_TO_TICKS(1000)); // 1000ms 유지 (최소 500ms)
+
+  // PWRKEY 핀 LOW: 정상 동작 모드로 전환
+  HAL_GPIO_WritePin(GSM_PORT_GPIO_PORT, GSM_PORT_GPIO_PWR_PIN, GPIO_PIN_RESET);
+
+  // 부팅 초기 대기 (3초)
+  // 참고: RDY URC는 약 13초 후 자동 수신됨
+  vTaskDelay(pdMS_TO_TICKS(3000));
+
+  return 0;
 }

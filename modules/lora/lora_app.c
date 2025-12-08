@@ -1087,6 +1087,67 @@ void lora_instance_init(void)
   LOG_INFO("LORA 인스턴스 초기화 완료");
 }
 
+void lora_instance_deinit(void) {
+  LOG_INFO("LoRa 인스턴스 중지 시작...");
+
+  // 초기화되지 않은 상태면 무시
+  if (!instance.initialized) {
+    LOG_WARN("LoRa 인스턴스가 초기화되지 않았습니다");
+    return;
+  }
+
+  // 1. RX Task 삭제
+  if (instance.rx_task != NULL) {
+    vTaskDelete(instance.rx_task);
+    instance.rx_task = NULL;
+    LOG_INFO("LoRa RX Task 삭제 완료");
+  }
+
+  // 2. TX Task 삭제
+  if (instance.tx_task != NULL) {
+    vTaskDelete(instance.tx_task);
+    instance.tx_task = NULL;
+    LOG_INFO("LoRa TX Task 삭제 완료");
+  }
+
+  // 3. Queue 삭제
+  if (instance.queue != NULL) {
+    vQueueDelete(instance.queue);
+    instance.queue = NULL;
+    LOG_INFO("LoRa RX Queue 삭제 완료");
+  }
+
+  if (instance.cmd_queue != NULL) {
+    vQueueDelete(instance.cmd_queue);
+    instance.cmd_queue = NULL;
+    LOG_INFO("LoRa CMD Queue 삭제 완료");
+  }
+
+  // 4. Mutex 삭제
+  if (instance.mutex != NULL) {
+    vSemaphoreDelete(instance.mutex);
+    instance.mutex = NULL;
+    LOG_INFO("LoRa Mutex 삭제 완료");
+  }
+
+  // 5. UART 비활성화
+  lora_port_stop(&instance.lora);
+
+  // 6. 상태 초기화
+  instance.initialized = false;
+  instance.init_complete = false;
+  instance.tx_task_ready = false;
+  instance.rx_task_ready = false;
+  instance.current_cmd_req = NULL;
+  instance.p2p_recv_callback = NULL;
+  instance.p2p_recv_user_data = NULL;
+
+  // 7. RTCM 재조립 버퍼 초기화
+  memset(&instance.rtcm_reassembly, 0, sizeof(instance.rtcm_reassembly));
+
+  LOG_INFO("LoRa 인스턴스 중지 완료");
+}
+
 bool lora_send_command_sync(const char *cmd, uint32_t timeout_ms)
 {
   if (!instance.initialized)
