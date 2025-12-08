@@ -490,11 +490,13 @@ void gsm_start_rover(void) {
   LOG_INFO("Rover 모드 LTE 시작");
 
   // GSM 태스크 생성 (처음 호출 시만 생성)
-  gsm_task_create(NULL);
-
-  // EC25 모듈 전원 ON
-  // RDY URC → LTE 초기화 → NTRIP 태스크 생성 (자동)
-  gsm_port_power_on();
-
-  LOG_INFO("LTE 전원 ON 완료, RDY 대기 중...");
+  if (!gsm_task_created) {
+    // 태스크 생성 시 gsm_start()가 자동 호출되어 EC25 전원 ON
+    gsm_task_create(NULL);
+    LOG_INFO("GSM 태스크 생성 완료, EC25 부팅 중...");
+  } else {
+    // 태스크가 이미 있으면 전원만 ON
+    gsm_port_power_on();
+    LOG_INFO("EC25 전원 ON, RDY 대기 중...");
+  }
 }
