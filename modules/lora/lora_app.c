@@ -1148,6 +1148,27 @@ void lora_instance_deinit(void) {
   LOG_INFO("LoRa 인스턴스 중지 완료");
 }
 
+/**
+ * @brief Rover 모드에서 LoRa 시작
+ *
+ * LoRa 인스턴스를 초기화하고 P2P 모드 설정
+ * 내부적으로 lora_instance_init() 호출 (멱등성 보장)
+ */
+void lora_start_rover(void) {
+  LOG_INFO("Rover 모드 LoRa 시작");
+
+  // 이미 초기화되어 있으면 재초기화하지 않음
+  if (instance.initialized) {
+    LOG_INFO("LoRa 이미 초기화됨");
+    return;
+  }
+
+  // LoRa 인스턴스 초기화
+  lora_instance_init();
+
+  LOG_INFO("LoRa 초기화 완료");
+}
+
 bool lora_send_command_sync(const char *cmd, uint32_t timeout_ms)
 {
   if (!instance.initialized)

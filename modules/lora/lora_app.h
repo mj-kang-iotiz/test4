@@ -99,6 +99,14 @@ void lora_instance_init(void);
 void lora_instance_deinit(void);
 
 /**
+ * @brief Rover 모드에서 LoRa 시작
+ *
+ * LoRa 인스턴스를 초기화하고 P2P 모드 설정
+ * 내부적으로 lora_instance_init() 호출 (멱등성 보장)
+ */
+void lora_start_rover(void);
+
+/**
  * @brief LoRa 명령어 전송 (동기)
  *
  * @param cmd AT 명령어 (예: "AT+SET_CONFIG=lora:work_mode:0\r\n")

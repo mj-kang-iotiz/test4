@@ -32,12 +32,16 @@ static void gsm_at_cmd_process_task(void *pvParameters);
  * @param arg
  */
 void gsm_task_create(void *arg) {
-  xTaskCreate(gsm_process_task, "gsm", 1536, arg, tskIDLE_PRIORITY + 1, NULL);
+  if (!gsm_task_created) {
+    xTaskCreate(gsm_process_task, "gsm", 1536, arg, tskIDLE_PRIORITY + 1, NULL);
+    gsm_task_created = true;
+  }
 }
 
 
 static TaskHandle_t ntrip_task_handle = NULL;
 static bool ntrip_should_restart = false;
+static bool gsm_task_created = false;
 
 static void gsm_evt_handler(gsm_evt_t evt, void *args) {
   switch (evt) {
@@ -474,4 +478,23 @@ void gsm_socket_update_recv_time(uint8_t connect_id) {
 
     last_recv_tick[connect_id] = xTaskGetTickCount();
   }
+}
+
+/**
+ * @brief Rover 모드에서 LTE 시작
+ *
+ * GSM 태스크가 없으면 생성하고, EC25 모듈 전원을 켬
+ * RDY URC 수신 후 자동으로 LTE 초기화 및 NTRIP 연결
+ */
+void gsm_start_rover(void) {
+  LOG_INFO("Rover 모드 LTE 시작");
+
+  // GSM 태스크 생성 (처음 호출 시만 생성)
+  gsm_task_create(NULL);
+
+  // EC25 모듈 전원 ON
+  // RDY URC → LTE 초기화 → NTRIP 태스크 생성 (자동)
+  gsm_port_power_on();
+
+  LOG_INFO("LTE 전원 ON 완료, RDY 대기 중...");
 }
