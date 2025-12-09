@@ -218,7 +218,7 @@ static const char *um982_base_cmds[] = {
   "rtcm1124 com1 1\r\n", // beidou msm4
   // "rtcm1084 com1 1\r\n", // glonass msm4
   "rtcm1094 com1 1\r\n", // galileo msm4
-  "gpgga com1 1\r\n",
+  "gngga com1 1\r\n",
   // "gpgsv com1 1\r\n",
   // "BESTNAVB 1\r\n",
   // "MODE BASE TIME 120 0.1\r\n",
@@ -231,7 +231,7 @@ static const char *um982_rover_cmds[] = {
   "unmask GPS\r\n",
   "unmask GLO\r\n",
   "unmask GAL\r\n",
-  "gpgga com1 1\r\n",
+  "gngga com1 1\r\n",
   // "gpgsv com1 1\r\n",
   "gpths com1 1\r\n",
   // "OBSVHA COM1 1\r\n", // slave antenna
