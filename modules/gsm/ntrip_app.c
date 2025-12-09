@@ -548,84 +548,45 @@ bool ntrip_gga_send_queue_initialized(void)
 }
 
 void ntrip_stop(void)
-
 {
-
   LOG_INFO("NTRIP 중지 시작...");
 
- 
-
-  // 연결 상태 플래그 리셋
-
+  // 연결 상태 플래그 리셋 (태스크들이 루프를 빠져나가도록)
   g_ntrip_connected = false;
 
- 
-
-  // GGA 송신 태스크 삭제
-
-  if (g_gga_send_task_handle != NULL)
-
-  {
-
-    vTaskDelete(g_gga_send_task_handle);
-
-    g_gga_send_task_handle = NULL;
-
-    LOG_INFO("GGA 송신 태스크 삭제");
-
-  }
-
- 
-
-  // TCP 소켓 닫기
-
-  if (g_ntrip_socket != NULL)
-
-  {
-
-    tcp_close_force(g_ntrip_socket);
-
-    tcp_socket_destroy(g_ntrip_socket);
-
-    g_ntrip_socket = NULL;
-
-    LOG_INFO("NTRIP 소켓 닫기");
-
-  }
-
- 
-
-  // 수신 태스크 삭제
-
+  // ★ 중요: 태스크를 먼저 삭제한 후 소켓/큐를 정리해야 함
+  // 1. 수신 태스크 삭제 (tcp_recv를 더 이상 호출하지 않도록)
   if (g_ntrip_recv_task_handle != NULL)
-
   {
-
     vTaskDelete(g_ntrip_recv_task_handle);
-
     g_ntrip_recv_task_handle = NULL;
-
     LOG_INFO("NTRIP 수신 태스크 삭제");
-
   }
 
- 
-
-  // GGA 큐 정리 (큐 삭제는 하지 않음, 재시작 시 재사용)
-
-  if (g_gga_send_queue != NULL)
-
+  // 2. GGA 송신 태스크 삭제
+  if (g_gga_send_task_handle != NULL)
   {
-
-    xQueueReset(g_gga_send_queue);
-
-    LOG_INFO("GGA 큐 리셋");
-
+    vTaskDelete(g_gga_send_task_handle);
+    g_gga_send_task_handle = NULL;
+    LOG_INFO("GGA 송신 태스크 삭제");
   }
 
- 
+  // 3. 모든 태스크가 종료된 후 소켓 정리
+  if (g_ntrip_socket != NULL)
+  {
+    tcp_close_force(g_ntrip_socket);
+    tcp_socket_destroy(g_ntrip_socket);
+    g_ntrip_socket = NULL;
+    LOG_INFO("NTRIP 소켓 닫기 및 파괴");
+  }
+
+  // 4. GGA 큐 정리 (큐 삭제는 하지 않음, 재시작 시 재사용)
+  if (g_gga_send_queue != NULL)
+  {
+    xQueueReset(g_gga_send_queue);
+    LOG_INFO("GGA 큐 리셋");
+  }
 
   led_set_color(LED_ID_1, LED_COLOR_NONE);
-
   LOG_INFO("NTRIP 중지 완료");
 }

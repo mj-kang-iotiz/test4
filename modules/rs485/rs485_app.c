@@ -12,6 +12,8 @@
 #include "gps_app.h"
 #include "lora_app.h"
 #include "gsm_app.h"
+#include "ntrip_app.h"
+#include "lte_init.h"
 
 #ifndef TAG
 #define TAG "RS485_APP"
@@ -339,14 +341,24 @@ static void rs485_task(void *pvParameter)
 
       if(strncmp(cmd, "LTE", 3) == 0)
       {
-        RS485_Send("+GUGUSTART-LTE", strlen("+GUGUSTART-LTE"));
-        
+        RS485_Send("+GUGUSTART-LTE\r", strlen("+GUGUSTART-LTE\r"));
+
+        // LTE 초기화 완료 확인 후 NTRIP 시작
+        if (lte_get_init_state() == LTE_INIT_DONE)
+        {
+          ntrip_task_create(&gsm_handle);
+          LOG_INFO("NTRIP 태스크 시작");
+        }
+        else
+        {
+          LOG_WARN("LTE 초기화 미완료 - NTRIP 시작 불가");
+        }
 
         is_gugu_started = true;
       }
       else if(strncmp(cmd, "LORA", 4) == 0)
       {
-        RS485_Send("+GUGUSTART-LORA", strlen("+GUGUSTART-LORA"));
+        RS485_Send("+GUGUSTART-LORA\r", strlen("+GUGUSTART-LORA\r"));
 
 
         is_gugu_started = true;
@@ -358,6 +370,9 @@ static void rs485_task(void *pvParameter)
     }
 		else if (strncmp(rx_buffer, "AT+GUGUSTOP", 11) == 0)
     {
+        // NTRIP 중지
+        ntrip_stop();
+        LOG_INFO("NTRIP 태스크 중지");
 
 				RS485_Send((uint8_t*)STOP_Response, strlen(STOP_Response));
         is_gugu_started = false;
