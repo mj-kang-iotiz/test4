@@ -121,26 +121,19 @@ uint8_t gps_parse_nmea_term(gps_t *gps) {
       const char *talker = gps->nmea.term_str;
       const char *msg = &gps->nmea.term_str[2];
 
-      bool is_talker_gn = false;
-
-      if (strncmp(talker, "GN", 2) == 0) {
-        is_talker_gn = true;
-      }
-
       if (!strncmp(msg, "GGA", 3)) {
-        if (is_talker_gn) {
-          gps->nmea.msg_type = GPS_NMEA_MSG_GGA;
+        // 모든 talker ID의 GGA 메시지 파싱 (GP, GN, GL 등)
+        gps->nmea.msg_type = GPS_NMEA_MSG_GGA;
 
 #if defined(USE_STORE_RAW_GGA)
-          gps->nmea_data.gga_raw_pos = 0;
-          _gps_gga_raw_add(gps, '$');
-          for (int i = 0; i < 5; i++) {
-            _gps_gga_raw_add(gps, gps->nmea.term_str[i]);
-          }
-          _gps_gga_raw_add(gps, ',');
-          gps->nmea_data.gga_is_rdy = false;
-#endif
+        gps->nmea_data.gga_raw_pos = 0;
+        _gps_gga_raw_add(gps, '$');
+        for (int i = 0; i < 5; i++) {
+          _gps_gga_raw_add(gps, gps->nmea.term_str[i]);
         }
+        _gps_gga_raw_add(gps, ',');
+        gps->nmea_data.gga_is_rdy = false;
+#endif
       } else if (!strncmp(msg, "RMC", 3)) {
         gps->nmea.msg_type = GPS_NMEA_MSG_RMC;
       } else if (!strncmp(msg, "THS", 3)) {
