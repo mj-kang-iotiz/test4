@@ -348,6 +348,22 @@ void gps_parse_process(gps_t *gps, const void *data, size_t len) {
       gps_parse_unicore_bin(gps);
     }
     else if (gps->protocol == GPS_PROTOCOL_RTCM) {
+      // RTCM 파싱 중 다른 프로토콜 시작 문자 감지 시 리셋
+      if (*d == '$' || *d == 0xB5 || *d == 0xAA) {
+        // 잘못된 RTCM 데이터 또는 프로토콜 전환 - 리셋 후 재처리
+        memset(&gps->rtcm, 0, sizeof(gps->rtcm));
+        memset(gps->payload, 0, sizeof(gps->payload));
+        gps->pos = 0;
+        gps->protocol = GPS_PROTOCOL_NONE;
+        gps->state = GPS_PARSE_STATE_NONE;
+
+        // 현재 바이트를 다시 처리하기 위해 continue하지 않고 protocol을 리셋
+        // 다음 루프에서 재처리됨
+        --d;
+        ++len;
+        continue;
+      }
+
       add_payload(gps, *d);
       if (gps->state == GPS_PARSE_STATE_RTCM_PREAMBLE) {
     	gps->rtcm.msg_len = (*d & 0x03) << 8;
@@ -356,6 +372,17 @@ void gps_parse_process(gps_t *gps, const void *data, size_t len) {
       else if (gps->state == GPS_PARSE_STATE_RTCM_LEN_1) {
         gps->rtcm.msg_len |= *d;
         gps->rtcm.total_len = 3 + gps->rtcm.msg_len + 3;  // 헤더(3) + 페이로드 + CRC(3)
+
+        // total_len이 버퍼 크기를 초과하면 리셋 (잘못된 데이터)
+        if (gps->rtcm.total_len > GPS_PAYLOAD_SIZE) {
+          memset(&gps->rtcm, 0, sizeof(gps->rtcm));
+          memset(gps->payload, 0, sizeof(gps->payload));
+          gps->pos = 0;
+          gps->protocol = GPS_PROTOCOL_NONE;
+          gps->state = GPS_PARSE_STATE_NONE;
+          continue;
+        }
+
         gps->rtcm.payload_cnt = 0;
         gps->state = GPS_PARSE_STATE_RTCM_PAYLOAD;
       }
