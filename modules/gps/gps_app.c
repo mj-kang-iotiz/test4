@@ -499,13 +499,15 @@ void gps_evt_handler(gps_t *gps, gps_event_t event, gps_procotol_t protocol,
   switch (protocol) {
   case GPS_PROTOCOL_NMEA:
     if (msg.nmea == GPS_NMEA_MSG_GGA) {
+      LOG_ERR("GGA parsed! fix=%d, sat=%d", gps->nmea_data.gga.fix, gps->nmea_data.gga.sat_num);
+
     	if(config->board == BOARD_TYPE_BASE_F9P || config->board == BOARD_TYPE_BASE_UM982)
     	{
           if (gps->nmea_data.gga.fix != inst->last_fix) {
     	        base_auto_fix_on_gps_fix_changed(gps->nmea_data.gga.fix);
     	        inst->last_fix = gps->nmea_data.gga.fix;
     	    }
-              	    
+
     	}
 
       if (gps->nmea_data.gga_is_rdy)

@@ -3,6 +3,11 @@
 #include "gps_parse.h"
 #include <string.h>
 
+#ifndef TAG
+#define TAG "GPS_NMEA"
+#endif
+#include "log.h"
+
 static double parse_lat_lon(gps_t *gps);
 static void parse_nmea_gga(gps_t *gps);
 
@@ -123,6 +128,7 @@ uint8_t gps_parse_nmea_term(gps_t *gps) {
 
       if (!strncmp(msg, "GGA", 3)) {
         // 모든 talker ID의 GGA 메시지 파싱 (GP, GN, GL 등)
+        LOG_DEBUG("GGA detected: talker=%c%c", talker[0], talker[1]);
         gps->nmea.msg_type = GPS_NMEA_MSG_GGA;
 
 #if defined(USE_STORE_RAW_GGA)
