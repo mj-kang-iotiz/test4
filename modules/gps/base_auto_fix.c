@@ -4,6 +4,8 @@
 #include "gsm_port.h"
 #include "ubx_init.h"
 #include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
 #include "timers.h"
 #include <math.h>
 #include <string.h>
@@ -28,6 +30,14 @@ static base_auto_fix_state_t state = BASE_AUTO_FIX_DISABLED;
 static uint8_t gps_id = 0;
 static TimerHandle_t averaging_timer = NULL;
 
+// 워커 태스크 및 이벤트 큐
+static TaskHandle_t worker_task = NULL;
+static QueueHandle_t event_queue = NULL;
+
+typedef enum {
+  BASE_AUTO_FIX_EVENT_AVERAGING_COMPLETE
+} base_auto_fix_event_t;
+
 // 좌표 샘플 버퍼
 static coord_sample_t samples[MAX_SAMPLES];
 static uint32_t sample_count = 0;
@@ -40,6 +50,7 @@ static void averaging_timer_callback(TimerHandle_t xTimer);
 static bool calculate_average_with_outlier_removal(void);
 static bool switch_to_base_fixed_mode(void);
 static void shutdown_ntrip_and_lte(void);
+static void base_auto_fix_worker_task(void *pvParameter);
 
 /**
 
@@ -63,6 +74,31 @@ bool base_auto_fix_init(uint8_t id) {
 
     if (averaging_timer == NULL) {
       LOG_ERR("타이머 생성 실패");
+      return false;
+    }
+  }
+
+  // 이벤트 큐 생성
+  if (event_queue == NULL) {
+    event_queue = xQueueCreate(5, sizeof(base_auto_fix_event_t));
+    if (event_queue == NULL) {
+      LOG_ERR("이벤트 큐 생성 실패");
+      return false;
+    }
+  }
+
+  // 워커 태스크 생성
+  if (worker_task == NULL) {
+    BaseType_t ret = xTaskCreate(base_auto_fix_worker_task,
+                                  "base_auto_fix",
+                                  2048,  // 스택 크기 (블로킹 작업 포함)
+                                  NULL,
+                                  tskIDLE_PRIORITY + 2,
+                                  &worker_task);
+    if (ret != pdPASS) {
+      LOG_ERR("워커 태스크 생성 실패");
+      vQueueDelete(event_queue);
+      event_queue = NULL;
       return false;
     }
   }
@@ -105,7 +141,10 @@ void base_auto_fix_stop(void) {
 
   }
 
-
+  // 이벤트 큐 클리어
+  if (event_queue != NULL) {
+    xQueueReset(event_queue);
+  }
 
   state = BASE_AUTO_FIX_DISABLED;
 
@@ -250,6 +289,9 @@ bool base_auto_fix_get_average_coord(coord_average_t *result) {
 /**
 
  * @brief 평균 계산 타이머 콜백 (60초 후 호출)
+ *
+ * 타이머 콜백에서는 블로킹 작업을 하지 않고,
+ * 워커 태스크에 이벤트만 전달합니다.
 
  */
 
@@ -257,60 +299,13 @@ static void averaging_timer_callback(TimerHandle_t xTimer) {
 
   LOG_INFO("평균 계산 타이머 만료 (샘플 수: %lu)", sample_count);
 
+  // 워커 태스크에 이벤트 전송
+  base_auto_fix_event_t event = BASE_AUTO_FIX_EVENT_AVERAGING_COMPLETE;
 
-
-  if (sample_count < MIN_SAMPLES) {
-
-    LOG_ERR("샘플 수 부족 (최소 %d개 필요, 현재 %lu개)", MIN_SAMPLES, sample_count);
-
+  if (xQueueSend(event_queue, &event, 0) != pdTRUE) {
+    LOG_ERR("워커 태스크에 이벤트 전송 실패");
     state = BASE_AUTO_FIX_FAILED;
-
-    return;
-
   }
-
-
-
-  // 평균 계산 (이상치 제거 포함)
-
-  if (!calculate_average_with_outlier_removal()) {
-
-    LOG_ERR("평균 계산 실패");
-
-    state = BASE_AUTO_FIX_FAILED;
-
-    return;
-
-  }
-
-
-
-  LOG_INFO("평균 좌표 계산 완료:");
-
-  LOG_INFO("  Lat: %.9f (유효: %lu, 제거: %lu)",
-
-           avg_result.lat, avg_result.count, avg_result.rejected);
-
-  LOG_INFO("  Lon: %.9f", avg_result.lon);
-
-  LOG_INFO("  Alt: %.3f", avg_result.alt);
-
-
-
-  // Base Fixed 모드로 전환
-
-  state = BASE_AUTO_FIX_SWITCHING;
-
-  if (!switch_to_base_fixed_mode()) {
-
-    LOG_ERR("Base Fixed 모드 전환 실패");
-
-    state = BASE_AUTO_FIX_FAILED;
-
-    return;
-
-  }
-
 }
 
 
@@ -597,17 +592,8 @@ static bool switch_to_base_fixed_mode(void) {
 
 #endif
 
-
-
-  // NTRIP/LTE 종료
-
-  shutdown_ntrip_and_lte();
-
-
-
-  state = BASE_AUTO_FIX_COMPLETED;
-
-  LOG_INFO("Base Auto-Fix 완료!");
+  // shutdown_ntrip_and_lte()는 워커 태스크에서 처리
+  // state 변경도 워커 태스크에서 처리
 
   return true;
 
@@ -641,4 +627,62 @@ static void shutdown_ntrip_and_lte(void) {
 
   LOG_INFO("EC25 Power Off 완료");
 
+}
+
+/**
+ * @brief Base Auto-Fix 워커 태스크 (블로킹 작업 처리)
+ *
+ * 타이머 콜백에서 블로킹 작업을 직접 수행하지 않고,
+ * 이 워커 태스크가 큐를 통해 이벤트를 받아서 처리합니다.
+ */
+static void base_auto_fix_worker_task(void *pvParameter) {
+  base_auto_fix_event_t event;
+
+  LOG_INFO("Base Auto-Fix 워커 태스크 시작");
+
+  while (1) {
+    // 큐에서 이벤트 대기
+    if (xQueueReceive(event_queue, &event, portMAX_DELAY) == pdTRUE) {
+
+      if (event == BASE_AUTO_FIX_EVENT_AVERAGING_COMPLETE) {
+        LOG_INFO("평균 계산 완료 이벤트 수신");
+
+        // 샘플 수 확인
+        if (sample_count < MIN_SAMPLES) {
+          LOG_ERR("샘플 수 부족 (최소 %d개 필요, 현재 %lu개)", MIN_SAMPLES, sample_count);
+          state = BASE_AUTO_FIX_FAILED;
+          continue;
+        }
+
+        // 평균 계산 (이상치 제거 포함)
+        if (!calculate_average_with_outlier_removal()) {
+          LOG_ERR("평균 계산 실패");
+          state = BASE_AUTO_FIX_FAILED;
+          continue;
+        }
+
+        LOG_INFO("평균 좌표 계산 완료:");
+        LOG_INFO("  Lat: %.9f (유효: %lu, 제거: %lu)",
+                 avg_result.lat, avg_result.count, avg_result.rejected);
+        LOG_INFO("  Lon: %.9f", avg_result.lon);
+        LOG_INFO("  Alt: %.3f", avg_result.alt);
+
+        // Base Fixed 모드로 전환
+        state = BASE_AUTO_FIX_SWITCHING;
+        if (!switch_to_base_fixed_mode()) {
+          LOG_ERR("Base Fixed 모드 전환 실패");
+          state = BASE_AUTO_FIX_FAILED;
+          continue;
+        }
+
+        // NTRIP/LTE 종료 (블로킹 1.7초)
+        shutdown_ntrip_and_lte();
+
+        state = BASE_AUTO_FIX_COMPLETED;
+        LOG_INFO("Base Auto-Fix 완료!");
+      }
+    }
+  }
+
+  vTaskDelete(NULL);
 }
