@@ -80,4 +80,12 @@ void lte_network_check_timer_callback(TimerHandle_t xTimer);
 
 void lte_reinit_from_apn(void);
 
+/**
+ * @brief LTE 초기화 상태 리셋
+ *
+ * 전원을 껐다 켜거나 재시작 시 호출하여 초기화 상태를 리셋
+ * RDY 이벤트 수신 시 다시 초기화 시퀀스가 실행되도록 함
+ */
+void lte_reset_state(void);
+
 #endif // LTE_INIT_H

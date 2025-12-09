@@ -387,3 +387,10 @@ void lte_reinit_from_apn(void) {
       .cid = 1, .type = GSM_PDP_TYPE_IP, .apn = "m2m-router.lguplus.co.kr"};
   gsm_send_at_cgdcont(gsm_handle_ptr, GSM_AT_WRITE, &ctx, lte_apn_set_callback);
 }
+
+void lte_reset_state(void) {
+  LOG_INFO("LTE 상태 리셋");
+  lte_init_state = LTE_INIT_IDLE;
+  lte_init_retry_count = 0;
+  lte_network_check_count = 0;
+}
