@@ -206,6 +206,7 @@ void gps_parse_process(gps_t *gps, const void *data, size_t len) {
         memset(gps->payload, 0, sizeof(gps->payload));
         gps->pos = 0;
         add_payload(gps, *d);
+        gps->rtcm.bytes_received = 1;  // 첫 바이트 (0xD3) 카운트
         gps->protocol = GPS_PROTOCOL_RTCM;
         gps->state = GPS_PARSE_STATE_RTCM_PREAMBLE;
       }
@@ -224,6 +225,7 @@ void gps_parse_process(gps_t *gps, const void *data, size_t len) {
           memset(gps->payload, 0, sizeof(gps->payload));
           gps->pos = 0;
           add_payload(gps, *d);
+          gps->rtcm.bytes_received = 1;  // 첫 바이트 (0xD3) 카운트
           gps->protocol = GPS_PROTOCOL_RTCM;
           gps->state = GPS_PARSE_STATE_RTCM_PREAMBLE;
         }else if (*d == 0xB5) {
@@ -349,6 +351,8 @@ void gps_parse_process(gps_t *gps, const void *data, size_t len) {
     }
     else if (gps->protocol == GPS_PROTOCOL_RTCM) {
       add_payload(gps, *d);
+      gps->rtcm.bytes_received++;  // 항상 수신 바이트 수 증가
+
       if (gps->state == GPS_PARSE_STATE_RTCM_PREAMBLE) {
     	gps->rtcm.msg_len = (*d & 0x03) << 8;
         gps->state = GPS_PARSE_STATE_RTCM_LEN_1;
@@ -368,7 +372,8 @@ void gps_parse_process(gps_t *gps, const void *data, size_t len) {
           gps->rtcm.msg_type |= ((*d) >> 4) & 0x0F;
         }
 
-        if (gps->pos >= gps->rtcm.total_len) {
+        // bytes_received를 사용하여 버퍼 크기와 무관하게 종료 감지
+        if (gps->rtcm.bytes_received >= gps->rtcm.total_len) {
           gps_msg_t msg;
           msg.rtcm.msg_type = gps->rtcm.msg_type;
           if (gps->handler) {
@@ -377,6 +382,7 @@ void gps_parse_process(gps_t *gps, const void *data, size_t len) {
 
           memset(&gps->rtcm, 0, sizeof(gps->rtcm));
           memset(gps->payload, 0, sizeof(gps->payload));
+          gps->pos = 0;  // pos 초기화 추가
           gps->protocol = GPS_PROTOCOL_NONE;
           gps->state = GPS_PARSE_STATE_NONE;
         }
